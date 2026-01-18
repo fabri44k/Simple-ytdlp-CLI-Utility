@@ -1,9 +1,7 @@
 #include <iostream>
-#include <filesystem>
 #include "../include/yt_dlp_utils.h"
 
 using namespace std;
-namespace fs = std::filesystem;
 
 #define RESET   "\033[0m"
 #define RED     "\033[31m"
@@ -170,7 +168,7 @@ int handlePlaylistMode(){
     
     cout << RED << "\nSTART YT-DLP DOWNLOAD..." << RESET << endl;
     cout << RED << "----------------------------------------------------" << RESET << endl;
-    
+ 
     if (choice == 1) {
         downloadPlaylistAudioMp3WithThumbnailAndEnumeration(URL);
     } else if (choice == 2) {
@@ -180,12 +178,11 @@ int handlePlaylistMode(){
     } else if (choice == 4) {
         downloadPlaylistBestVideoAudio(URL);
     }
-    
+ 
     else {
         cout << "Invalid choice" << endl;
         return 1;
     }
-
 
     return 0;
 }
@@ -257,16 +254,16 @@ int main(int argc, char* argv[]) {
         } else if (arg == "--sub") {
             handleSubtitlesMode();
         }
-        
+
         else {
             cout << "Invalid argument" << endl;
             return 1;
         }
-        
+
     }
-    
+ 
     cout << GREEN << "----------------------------------------------------" << RESET << endl;
     cout << GREEN << "END YT-DLP UTILITY EXECUTION..." << RESET << endl;
     pauseApplication();
     return 0;
-}    
+}
