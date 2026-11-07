@@ -34,7 +34,7 @@ string removeSpaces(string text) {
 // EMBED SUBTITLES: returns false on invalid choice, subLangs empty = no subtitles
 bool askEmbedSubtitles(string& subLangs) {
     subLangs.clear();
-    cout << "Do you want to embed subtitles in the file? (y/n): ";
+    cout << "[EXPERIMENTAL] Do you want to embed subtitles in the file? (y/n): ";
     char choice;
     cin >> choice;
     if (choice == 'n') {
@@ -46,7 +46,7 @@ bool askEmbedSubtitles(string& subLangs) {
     }
     cin.ignore(numeric_limits<streamsize>::max(), '\n');
     cout << "Enter subtitle languages separated by comma (e.g. it,en)" << endl;
-    cout << "or press ENTER for the auto-generated ones in the original language: ";
+    cout << "or press ENTER for the auto-generated ones in the original language (YouTube): ";
     getline(cin, subLangs);
     subLangs = removeSpaces(subLangs);
     if (subLangs.empty()) {

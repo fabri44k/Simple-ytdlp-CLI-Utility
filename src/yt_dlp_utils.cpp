@@ -125,11 +125,17 @@ std::string toIso639_2(const std::string& lang) {
     return found != codes.end() ? found->second : lang;
 }
 
+// Hidden temporary folder in the current directory (same filesystem: rename always works)
+fs::path createTmpDir() {
+    const fs::path tmpDir = fs::current_path() / (".ytdlp_utility_tmp_" + std::to_string(std::time(nullptr)));
+    fs::create_directories(tmpDir);
+    return tmpDir;
+}
+
 // Trimmed download + subtitles: download clip and SRT in a temporary folder,
 // cut/shift the SRT to the selection, mux everything with ffmpeg (no re-encoding)
 void downloadTrimmedVideoWithSubtitles(const std::string& ytdlpCommand, double startSec, double endSec) {
-    const fs::path tmpDir = fs::current_path() / (".ytdlp_utility_tmp_" + std::to_string(std::time(nullptr)));
-    fs::create_directories(tmpDir);
+    const fs::path tmpDir = createTmpDir();
 
     runCommand(ytdlpCommand + " -o \"" + (tmpDir / "%(title)s.%(ext)s").string() + "\"");
 
@@ -231,14 +237,21 @@ void downloadVideo(const std::string& url, bool bestFormat, bool useCookies,
         return;
     }
 
+    // EXPERIMENTAL
     // --ignore-errors: a subtitle that fails (e.g. HTTP 429) doesn't stop the video download
+    // --write-subs + --write-auto-subs: manual subtitles preferred, auto-generated as fallback
     // --sub-format srt/best: native SRT (converting YouTube auto VTT duplicates every line)
-    command += " --ignore-errors --write-auto-subs --sub-langs \"" + subLangs +
+    command += " --ignore-errors --write-subs --write-auto-subs --sub-langs \"" + subLangs +
                "\" --sub-format \"srt/best\" --convert-subs srt";
 
     if (!trim) {
+        // with --write-subs yt-dlp keeps the subtitle files after embedding:
+        // write them in a temporary folder, deleted at the end
         // webm only supports WebVTT subtitles: remux to mkv before embedding
-        runCommand(command + " --embed-subs --remux-video \"webm>mkv\" -o \"%(title)s.%(ext)s\"");
+        const fs::path tmpDir = createTmpDir();
+        runCommand(command + " --embed-subs --remux-video \"webm>mkv\" -o \"%(title)s.%(ext)s\" -o \"subtitle:" +
+                   (tmpDir / "%(title)s.%(ext)s").string() + "\"");
+        fs::remove_all(tmpDir);
         return;
     }
 
@@ -248,7 +261,7 @@ void downloadVideo(const std::string& url, bool bestFormat, bool useCookies,
         std::cerr << "Invalid start time, cannot align subtitles." << std::endl;
         return;
     }
-    downloadTrimmedVideoWithSubtitles(command + " --write-subs", startSec, endSec);
+    downloadTrimmedVideoWithSubtitles(command, startSec, endSec);
 }
 
 // AUDIO MP3 WITH THUMBNAIL

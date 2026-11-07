@@ -14,7 +14,7 @@ Learn more about `yt-dlp` at [yt-dlp GitHub](https://github.com/yt-dlp/yt-dlp).
   Use cookies from your Firefox browser for accessing private or age-restricted video.
 - **Trim Specific Sections**  
   Download only a portion of a video using time ranges (e.g., `00:30:00-00:45:00`).
-- **Embedded Subtitles**  
+- **Embedded Subtitles (experimental)**  
   Add subtitle tracks (manual or auto-generated) directly into the downloaded video, also when trimming.
 - **Audio-Only (MP3)**  
   Extract audio as MP3 with embedded thumbnail.
@@ -81,7 +81,9 @@ This will download the file in the specific format you choose.
 Later you can decide to use cookies for authentication, trim the video and embed subtitles.
 This will download the file in the best available mp4+m4a format.
 
-### Embedded subtitles
+### Embedded subtitles (experimental)
+
+> This feature is experimental: it depends on how each site provides subtitles and may not work everywhere.
 
 As last option you can embed subtitles in the video: enter the languages (e.g. `it,en`) or press ENTER for the auto-generated ones in the original language.
 The final file will contain one subtitle track per language (mp4 and mkv; webm videos are saved as mkv, since webm only supports WebVTT subtitles).

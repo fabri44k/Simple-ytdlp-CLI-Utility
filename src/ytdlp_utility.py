@@ -208,13 +208,22 @@ def download_video(url, best_format, use_cookies, start_time="", end_time="", su
         execute_command(f'{command} -o "%(title)s.%(ext)s"')
         return
 
+    # SPERIMENTALE
     # --ignore-errors: un sottotitolo che fallisce (es. HTTP 429) non blocca il download del video
+    # --write-subs + --write-auto-subs: sottotitoli manuali preferiti, auto-generati come fallback
     # --sub-format srt/best: SRT nativo (convertire i VTT automatici di YouTube duplica le righe)
-    command += f' --ignore-errors --write-auto-subs --sub-langs "{sub_langs}" --sub-format "srt/best" --convert-subs srt'
+    command += f' --ignore-errors --write-subs --write-auto-subs --sub-langs "{sub_langs}" --sub-format "srt/best" --convert-subs srt'
 
     if not trim:
+        # con --write-subs yt-dlp tiene i file dei sottotitoli dopo l'embed:
+        # li scrive in una cartella temporanea, cancellata alla fine
         # webm supporta solo sottotitoli WebVTT: remux in mkv prima dell'embed
-        execute_command(f'{command} --embed-subs --remux-video "webm>mkv" -o "%(title)s.%(ext)s"')
+        tmp_dir = tempfile.mkdtemp(prefix=".ytdlp_utility_tmp_", dir=os.getcwd())
+        try:
+            subtitle_template = os.path.join(tmp_dir, "%(title)s.%(ext)s")
+            execute_command(f'{command} --embed-subs --remux-video "webm>mkv" -o "%(title)s.%(ext)s" -o "subtitle:{subtitle_template}"')
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
         return
 
     start_sec = parse_time_to_seconds(start_time)
@@ -222,7 +231,7 @@ def download_video(url, best_format, use_cookies, start_time="", end_time="", su
     if start_sec is None:
         print("Invalid start time, cannot align subtitles.")
         return
-    download_trimmed_video_with_subtitles(f"{command} --write-subs", start_sec, end_sec)
+    download_trimmed_video_with_subtitles(command, start_sec, end_sec)
 
 # AUDIO MP3 WITH THUMBNAIL
 def download_audio_mp3_with_thumbnail(url):
@@ -274,14 +283,14 @@ def download_subtitles(url, languages="", use_cookies=False):
 
 def ask_embed_subtitles():
     """Ritorna la stringa delle lingue ("" = nessun sottotitolo), None se scelta non valida"""
-    choice = get_user_input("Do you want to embed subtitles in the file? (y/n): ").lower()
+    choice = get_user_input("[EXPERIMENTAL] Do you want to embed subtitles in the file? (y/n): ").lower()
     if choice == 'n':
         return ""
     if choice != 'y':
         print("Invalid choice")
         return None
     print("Enter subtitle languages separated by comma (e.g. it,en)")
-    languages = get_user_input("or press ENTER for the auto-generated ones in the original language: ")
+    languages = get_user_input("or press ENTER for the auto-generated ones in the original language (YouTube): ")
     return "".join(languages.split()) or ".*-orig"
 
 def handle_video_audio_mode_with_selection():
