@@ -1,4 +1,6 @@
 #include <iostream>
+#include <algorithm>
+#include <cctype>
 #include <limits>
 #include "../include/yt_dlp_utils.h"
 
@@ -23,6 +25,36 @@ bool verify_install(const string& program) {
 }
 
 
+// Removes spaces: "it, en" -> "it,en" (yt-dlp treats each language as a regex)
+string removeSpaces(string text) {
+    text.erase(remove_if(text.begin(), text.end(), [](unsigned char c) { return isspace(c); }), text.end());
+    return text;
+}
+
+// EMBED SUBTITLES: returns false on invalid choice, subLangs empty = no subtitles
+bool askEmbedSubtitles(string& subLangs) {
+    subLangs.clear();
+    cout << "Do you want to embed subtitles in the file? (y/n): ";
+    char choice;
+    cin >> choice;
+    if (choice == 'n') {
+        return true;
+    }
+    if (choice != 'y') {
+        cout << "Invalid choice" << endl;
+        return false;
+    }
+    cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    cout << "Enter subtitle languages separated by comma (e.g. it,en)" << endl;
+    cout << "or press ENTER for the auto-generated ones in the original language: ";
+    getline(cin, subLangs);
+    subLangs = removeSpaces(subLangs);
+    if (subLangs.empty()) {
+        subLangs = ".*-orig";
+    }
+    return true;
+}
+
 int  handleVideoAudioModeWithSelection(){
     cout << "Video+Audio with Selection mode selected" << endl;
     // URL 
@@ -45,39 +77,31 @@ int  handleVideoAudioModeWithSelection(){
     }
     
     // TRIM FUNCTION
-    bool trim_flag = false;
-    string selection_string;
+    string start_time, end_time;
     cout << "Do you want to trim the video? (y/n): ";
     cin >> choice;
     if (choice == 'y') {
-        trim_flag = true;
-        string start_time, end_time;
         cout << "Enter the start time (hh:mm:ss OR mm:ss): ";
         cin >> start_time;
         cout << "Enter the end time (hh:mm:ss OR mm:ss): ";
         cin >> end_time;
-        selection_string = "*"+start_time+"-"+end_time;
-        cout << "Your selection: "<< selection_string << endl;
+        cout << "Your selection: *" << start_time << "-" << end_time << endl;
 
-    } else if (choice == 'n') {
-        trim_flag = false;
-    } else {
+    } else if (choice != 'n') {
         cout << "Invalid choice" << endl;
+        return 1;
+    }
+
+    // SUBTITLES
+    string sub_langs;
+    if (!askEmbedSubtitles(sub_langs)) {
         return 1;
     }
     
     cout << RED << "\nSTART YT-DLP DOWNLOAD..." << RESET << endl;
     cout << RED << "USE id+id FOR SELECTION" << RESET << endl;
     cout << RED << "----------------------------------------------------" << RESET << endl;
-    if (cookies_flag && trim_flag) {
-        downloadTrimmedVideoWithCookies(URL, selection_string);
-    } else if (!cookies_flag && trim_flag) {
-        downloadTrimmedVideoWithoutCookies(URL, selection_string);
-    } else if (cookies_flag && !trim_flag) {
-        downloadFullVideoWithCookies(URL);
-    } else if (!cookies_flag && !trim_flag) {
-        downloadFullVideoWithoutCookies(URL);
-    }
+    downloadVideo(URL, false, cookies_flag, start_time, end_time, sub_langs);
 
     return 0;
     
@@ -105,38 +129,30 @@ int handleVideoAudioModeWithBestFormat(){
     }
     
     // TRIM FUNCTION
-    bool trim_flag = false;
-    string selection_string;
+    string start_time, end_time;
     cout << "Do you want to trim the video? (y/n): ";
     cin >> choice;
     if (choice == 'y') {
-        trim_flag = true;
-        string start_time, end_time;
         cout << "Enter the start time (hh:mm:ss OR mm:ss): ";
         cin >> start_time;
         cout << "Enter the end time (hh:mm:ss OR mm:ss): ";
         cin >> end_time;
-        selection_string = "*"+start_time+"-"+end_time;
-        cout << "Your selection: "<< selection_string << endl;
+        cout << "Your selection: *" << start_time << "-" << end_time << endl;
 
-    } else if (choice == 'n') {
-        trim_flag = false;
-    } else {
+    } else if (choice != 'n') {
         cout << "Invalid choice" << endl;
+        return 1;
+    }
+
+    // SUBTITLES
+    string sub_langs;
+    if (!askEmbedSubtitles(sub_langs)) {
         return 1;
     }
 
     cout << RED << "\nSTART YT-DLP DOWNLOAD..." << RESET << endl;
     cout << RED << "----------------------------------------------------" << RESET << endl;
-    if (cookies_flag && trim_flag) {
-        downloadTrimmedVideoWithCookiesBest(URL, selection_string);
-    } else if (!cookies_flag && trim_flag) {
-        downloadTrimmedVideoWithoutCookiesBest(URL, selection_string);
-    } else if (cookies_flag && !trim_flag) {
-        downloadFullVideoWithCookiesBest(URL);
-    } else if (!cookies_flag && !trim_flag) {
-        downloadFullVideoWithoutCookiesBest(URL);
-    }
+    downloadVideo(URL, true, cookies_flag, start_time, end_time, sub_langs);
 
     return 0;
 }
@@ -213,6 +229,7 @@ int handleSubtitlesMode() {
     cout << "Enter subtitle languages separated by comma (e.g. it,en)" << endl;
     cout << "or press ENTER for all manual subtitles + auto-generated in the original language: ";
     getline(cin, languages);
+    languages = removeSpaces(languages);
 
     cout << RED << "\nSTART YT-DLP DOWNLOAD..." << RESET << endl;
     cout << RED << "----------------------------------------------------" << RESET << endl;

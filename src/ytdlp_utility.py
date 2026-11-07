@@ -2,6 +2,8 @@ import subprocess
 import sys
 import os
 import re
+import shutil
+import tempfile
 
 # Colori per il terminale
 RESET = "\033[0m"
@@ -62,45 +64,165 @@ def create_playlist_directory(url):
 
 ##* ytdlp CALlS
 
-# VIDEO+AUDIO COOKIES
-def download_full_video_with_cookies(url):
-    command = f'yt-dlp --cookies-from-browser firefox -f- -o "%(title)s.%(ext)s" --verbose "{url}"'
-    execute_command(command)
+BEST_FORMAT = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
 
-# VIDEO+AUDIO BEST COOKIES
-def download_full_video_with_cookies_best(url):
-    command = f'yt-dlp --cookies-from-browser firefox -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" -o "%(title)s.%(ext)s" --verbose "{url}"'
-    execute_command(command)
+ISO639_2 = {
+    "ar": "ara", "de": "deu", "en": "eng", "es": "spa", "fr": "fra", "hi": "hin",
+    "it": "ita", "ja": "jpn", "ko": "kor", "nl": "nld", "pl": "pol", "pt": "por",
+    "ro": "ron", "ru": "rus", "sv": "swe", "tr": "tur", "uk": "ukr", "zh": "zho",
+}
+
+def parse_time_to_seconds(text):
+    """"hh:mm:ss", "mm:ss" o "ss" (decimali ammessi) -> secondi, None se non valido"""
+    parts = text.split(":")
+    if not 1 <= len(parts) <= 3:
+        return None
+    total = 0.0
+    for part in parts:
+        try:
+            value = float(part)
+        except ValueError:
+            return None
+        if value < 0:
+            return None
+        total = total * 60 + value
+    return total
+
+SRT_TIME = re.compile(r"(\d+):(\d+):(\d+)[,.](\d+)")
+
+def parse_srt_timestamp(text):
+    m = SRT_TIME.search(text)
+    if not m:
+        return None
+    h, mi, s, ms = map(int, m.groups())
+    return ((h * 60 + mi) * 60 + s) * 1000 + ms
+
+def format_srt_timestamp(ms):
+    return f"{ms // 3600000:02d}:{ms // 60000 % 60:02d}:{ms // 1000 % 60:02d},{ms % 1000:03d}"
+
+def trim_srt(input_path, output_path, start_ms, end_ms):
+    """Tiene solo le righe dentro [start_ms, end_ms] e le sposta in modo che start_ms diventi 0
+    (yt-dlp --download-sections taglia il video ma non i sottotitoli)"""
+    with open(input_path, encoding="utf-8", errors="replace") as f:
+        blocks = re.split(r"\n[ \t]*\n", f.read().replace("\r\n", "\n"))
+    out = []
+    for block in blocks:
+        lines = [l for l in block.split("\n") if l.strip()]
+        timing = next((i for i, l in enumerate(lines) if "-->" in l), None)
+        if timing is None or timing + 1 >= len(lines):
+            continue
+        start_text, end_text = lines[timing].split("-->", 1)
+        cue_start, cue_end = parse_srt_timestamp(start_text), parse_srt_timestamp(end_text)
+        if cue_start is None or cue_end is None or cue_end <= start_ms or cue_start >= end_ms:
+            continue
+        out.append(f"{len(out) + 1}\n"
+                   f"{format_srt_timestamp(max(cue_start, start_ms) - start_ms)} --> "
+                   f"{format_srt_timestamp(min(cue_end, end_ms) - start_ms)}\n"
+                   + "\n".join(lines[timing + 1:]) + "\n")
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(out))
+
+def probe_duration_seconds(path):
+    """Durata di un file multimediale in secondi (ffprobe), None se errore"""
+    try:
+        result = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                                 "-of", "csv=p=0", path], capture_output=True, text=True)
+        return float(result.stdout.strip())
+    except (OSError, ValueError):
+        return None
+
+def download_trimmed_video_with_subtitles(ytdlp_command, start_sec, end_sec):
+    """Trim + sottotitoli: scarica clip e SRT in una cartella temporanea, taglia/sposta gli SRT
+    sulla selezione e unisce tutto con ffmpeg (senza ricodifica)"""
+    tmp_dir = tempfile.mkdtemp(prefix=".ytdlp_utility_tmp_", dir=os.getcwd())
+    try:
+        execute_command(f'{ytdlp_command} -o "{os.path.join(tmp_dir, "%(title)s.%(ext)s")}"')
+
+        subtitles = sorted(f for f in os.listdir(tmp_dir) if f.endswith(".srt"))
+        videos = [f for f in os.listdir(tmp_dir) if os.path.splitext(f)[1] not in (".srt", ".vtt", ".part", ".ytdl")]
+        if not videos:
+            print("Video download failed, nothing to do.")
+            return
+        video = max(videos, key=lambda f: os.path.getsize(os.path.join(tmp_dir, f)))
+        stem, ext = os.path.splitext(video)
+        is_mp4 = ext in (".mp4", ".m4v", ".mov")
+        out_ext = ext if is_mp4 or ext == ".mkv" else ".mkv"  # webm supporta solo WebVTT
+
+        if not subtitles:
+            print("No subtitles downloaded, saving the video without subtitles.")
+            os.replace(os.path.join(tmp_dir, video), video)
+            return
+
+        # Senza ricodifica il taglio parte dal keyframe precedente: mp4 nasconde la parte in piu'
+        # con una edit list, mkv/webm no. Inizio reale = inizio - (durata file - durata richiesta)
+        video_path = os.path.join(tmp_dir, video)
+        preroll = 0.0
+        if end_sec is not None and end_sec > start_sec:
+            file_sec = probe_duration_seconds(video_path)
+            if file_sec is not None and file_sec > end_sec - start_sec:
+                preroll = min(file_sec - (end_sec - start_sec), start_sec)
+        if preroll > 0.1:
+            print(f"Video starts {preroll:g}s before the selection (keyframe), subtitles aligned to it")
+        start_ms = int((start_sec - preroll) * 1000)
+        end_ms = int(end_sec * 1000) if end_sec is not None else 1 << 62
+
+        # ffmpeg chiamato senza shell: il titolo puo' contenere qualsiasi carattere
+        cmd = ["ffmpeg", "-v", "error", "-y", "-i", video_path]
+        maps, metadata = ["-map", "0"], []
+        for i, sub in enumerate(subtitles):
+            cut = os.path.join(tmp_dir, f"sub{i}.srt")
+            trim_srt(os.path.join(tmp_dir, sub), cut, start_ms, end_ms)
+            lang = os.path.splitext(os.path.splitext(sub)[0])[1][1:]  # "Title.it.srt" -> "it"
+            cmd += ["-i", cut]
+            maps += ["-map", str(i + 1)]
+            metadata += [f"-metadata:s:s:{i}", f"language={ISO639_2.get(lang.split('-')[0], lang)}",
+                         f"-metadata:s:s:{i}", f"title={lang}"]
+        tmp_output = os.path.join(tmp_dir, "output" + out_ext)
+        cmd += maps + ["-c", "copy", "-c:s", "mov_text" if is_mp4 else "srt"] + metadata + [tmp_output]
+        print(f"Executing: {' '.join(cmd)}")
+        if subprocess.call(cmd) == 0 and os.path.exists(tmp_output):
+            os.replace(tmp_output, stem + out_ext)
+            print(f"Saved with {len(subtitles)} subtitle track(s): {stem + out_ext}")
+        else:
+            print("ffmpeg failed, saving the video without subtitles.")
+            os.replace(video_path, video)
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
 # VIDEO+AUDIO
-def download_full_video_without_cookies(url):
-    command = f'yt-dlp -f- -o "%(title)s.%(ext)s" --verbose "{url}"'
-    execute_command(command)
+# best_format: best mp4+m4a, altrimenti selezione interattiva (-f-)
+# start_time vuoto: video intero, altrimenti tagliato da start_time a end_time
+# sub_langs vuoto: nessun sottotitolo, altrimenti quelle lingue vengono aggiunte come tracce
+def download_video(url, best_format, use_cookies, start_time="", end_time="", sub_langs=""):
+    command = "yt-dlp"
+    if use_cookies:
+        command += " --cookies-from-browser firefox"
+    command += f' -f "{BEST_FORMAT}"' if best_format else " -f-"
+    command += f' --verbose "{url}"'
 
-# VIDEO+AUDIO BEST
-def download_full_video_without_cookies_best(url):
-    command = f'yt-dlp -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" -o "%(title)s.%(ext)s" --verbose "{url}"'
-    execute_command(command)
+    trim = bool(start_time)
+    if trim:
+        command += f' --download-sections "*{start_time}-{end_time}"'
 
-# TRIMMED_VIDEO+AUDIO+COOKIES
-def download_trimmed_video_with_cookies(url, selection_string):
-    command = f'yt-dlp --cookies-from-browser firefox -f- -o "%(title)s.%(ext)s" --verbose "{url}" --download-sections "{selection_string}"'
-    execute_command(command)
+    if not sub_langs:
+        execute_command(f'{command} -o "%(title)s.%(ext)s"')
+        return
 
-# TRIMMED_VIDEO+AUDIO BEST COOKIES
-def download_trimmed_video_with_cookies_best(url, selection_string):
-    command = f'yt-dlp --cookies-from-browser firefox -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" -o "%(title)s.%(ext)s" --verbose "{url}" --download-sections "{selection_string}"'
-    execute_command(command)
+    # --ignore-errors: un sottotitolo che fallisce (es. HTTP 429) non blocca il download del video
+    # --sub-format srt/best: SRT nativo (convertire i VTT automatici di YouTube duplica le righe)
+    command += f' --ignore-errors --write-auto-subs --sub-langs "{sub_langs}" --sub-format "srt/best" --convert-subs srt'
 
-# TRIMMED_VIDEO+AUDIO
-def download_trimmed_video_without_cookies(url, selection_string):
-    command = f'yt-dlp -f- -o "%(title)s.%(ext)s" --verbose "{url}" --download-sections "{selection_string}"'
-    execute_command(command)
+    if not trim:
+        # webm supporta solo sottotitoli WebVTT: remux in mkv prima dell'embed
+        execute_command(f'{command} --embed-subs --remux-video "webm>mkv" -o "%(title)s.%(ext)s"')
+        return
 
-# TRIMMED_VIDEO+AUDIO BEST
-def download_trimmed_video_without_cookies_best(url, selection_string):
-    command = f'yt-dlp -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" -o "%(title)s.%(ext)s" --verbose "{url}" --download-sections "{selection_string}"'
-    execute_command(command)
+    start_sec = parse_time_to_seconds(start_time)
+    end_sec = parse_time_to_seconds(end_time)  # None (es. "inf") = fino alla fine
+    if start_sec is None:
+        print("Invalid start time, cannot align subtitles.")
+        return
+    download_trimmed_video_with_subtitles(f"{command} --write-subs", start_sec, end_sec)
 
 # AUDIO MP3 WITH THUMBNAIL
 def download_audio_mp3_with_thumbnail(url):
@@ -150,6 +272,18 @@ def download_subtitles(url, languages="", use_cookies=False):
 
 ##* ytdlp CALlS
 
+def ask_embed_subtitles():
+    """Ritorna la stringa delle lingue ("" = nessun sottotitolo), None se scelta non valida"""
+    choice = get_user_input("Do you want to embed subtitles in the file? (y/n): ").lower()
+    if choice == 'n':
+        return ""
+    if choice != 'y':
+        print("Invalid choice")
+        return None
+    print("Enter subtitle languages separated by comma (e.g. it,en)")
+    languages = get_user_input("or press ENTER for the auto-generated ones in the original language: ")
+    return "".join(languages.split()) or ".*-orig"
+
 def handle_video_audio_mode_with_selection():
     """Modalità Video+Audio con selezione"""
     print("Video+Audio with Selection mode selected")
@@ -169,33 +303,26 @@ def handle_video_audio_mode_with_selection():
         return 1
     
     # TRIM FUNCTION
-    trim_flag = False
-    selection_string = ""
+    start_time, end_time = "", ""
     choice = get_user_input("Do you want to trim the video? (y/n): ").lower()
     if choice == 'y':
-        trim_flag = True
-        start_time = get_user_input("Enter the start time (hh:mm:ss OR mm:ss): ")
-        end_time = get_user_input("Enter the end time (hh:mm:ss OR mm:ss): ")
-        selection_string = f"*{start_time}-{end_time}"
-        print(f"Your selection: {selection_string}")
-    elif choice == 'n':
-        trim_flag = False
-    else:
+        start_time = get_user_input("Enter the start time (hh:mm:ss OR mm:ss): ").strip()
+        end_time = get_user_input("Enter the end time (hh:mm:ss OR mm:ss): ").strip()
+        print(f"Your selection: *{start_time}-{end_time}")
+    elif choice != 'n':
         print("Invalid choice")
+        return 1
+
+    # SUBTITLES
+    sub_langs = ask_embed_subtitles()
+    if sub_langs is None:
         return 1
     
     print(f"{RED}\nSTART YT-DLP DOWNLOAD...{RESET}")
     print(f"{RED}USE id+id FOR SELECTION{RESET}")
     print(f"{RED}----------------------------------------------------{RESET}")
     
-    if cookies_flag and trim_flag:
-        download_trimmed_video_with_cookies(url, selection_string)
-    elif not cookies_flag and trim_flag:
-        download_trimmed_video_without_cookies(url, selection_string)
-    elif cookies_flag and not trim_flag:
-        download_full_video_with_cookies(url)
-    elif not cookies_flag and not trim_flag:
-        download_full_video_without_cookies(url)
+    download_video(url, False, cookies_flag, start_time, end_time, sub_langs)
     
     return 0
 
@@ -218,32 +345,25 @@ def handle_video_audio_mode_with_best_format():
         return 1
     
     # TRIM FUNCTION
-    trim_flag = False
-    selection_string = ""
+    start_time, end_time = "", ""
     choice = get_user_input("Do you want to trim the video? (y/n): ").lower()
     if choice == 'y':
-        trim_flag = True
-        start_time = get_user_input("Enter the start time (hh:mm:ss OR mm:ss): ")
-        end_time = get_user_input("Enter the end time (hh:mm:ss OR mm:ss): ")
-        selection_string = f"*{start_time}-{end_time}"
-        print(f"Your selection: {selection_string}")
-    elif choice == 'n':
-        trim_flag = False
-    else:
+        start_time = get_user_input("Enter the start time (hh:mm:ss OR mm:ss): ").strip()
+        end_time = get_user_input("Enter the end time (hh:mm:ss OR mm:ss): ").strip()
+        print(f"Your selection: *{start_time}-{end_time}")
+    elif choice != 'n':
         print("Invalid choice")
+        return 1
+
+    # SUBTITLES
+    sub_langs = ask_embed_subtitles()
+    if sub_langs is None:
         return 1
     
     print(f"{RED}\nSTART YT-DLP DOWNLOAD...{RESET}")
     print(f"{RED}----------------------------------------------------{RESET}")
     
-    if cookies_flag and trim_flag:
-        download_trimmed_video_with_cookies_best(url, selection_string)
-    elif not cookies_flag and trim_flag:
-        download_trimmed_video_without_cookies_best(url, selection_string)
-    elif cookies_flag and not trim_flag:
-        download_full_video_with_cookies_best(url)
-    elif not cookies_flag and not trim_flag:
-        download_full_video_without_cookies_best(url)
+    download_video(url, True, cookies_flag, start_time, end_time, sub_langs)
     
     return 0
 
@@ -306,7 +426,7 @@ def handle_subtitles_mode():
         return 1
 
     print("Enter subtitle languages separated by comma (e.g. it,en)")
-    languages = get_user_input("or press ENTER for all manual subtitles + auto-generated in the original language: ").strip()
+    languages = "".join(get_user_input("or press ENTER for all manual subtitles + auto-generated in the original language: ").split())
     print(f"{RED}\nSTART YT-DLP DOWNLOAD...{RESET}")
     print(f"{RED}----------------------------------------------------{RESET}")
     download_subtitles(url, languages, cookies_flag)

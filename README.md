@@ -14,6 +14,8 @@ Learn more about `yt-dlp` at [yt-dlp GitHub](https://github.com/yt-dlp/yt-dlp).
   Use cookies from your Firefox browser for accessing private or age-restricted video.
 - **Trim Specific Sections**  
   Download only a portion of a video using time ranges (e.g., `00:30:00-00:45:00`).
+- **Embedded Subtitles**  
+  Add subtitle tracks (manual or auto-generated) directly into the downloaded video, also when trimming.
 - **Audio-Only (MP3)**  
   Extract audio as MP3 with embedded thumbnail.
 - **Playlist Support**  
@@ -67,7 +69,7 @@ Remember to provide an url supported by `yt-dlp` (e.g., YouTube, Vimeo, etc.).
 ```bash
 .\ytdlp_utility
 ```
-Later you can decide to use cookies for authentication or trim the video. Only firefox cookies are supported at the moment.
+Later you can decide to use cookies for authentication, trim the video and embed subtitles. Only firefox cookies are supported at the moment.
 This will download the file in the specific format you choose.
 
 
@@ -76,8 +78,16 @@ This will download the file in the specific format you choose.
 ```bash
 .\ytdlp_utility --best
 ```
-Later you can decide to use cookies for authentication or trim the video.
+Later you can decide to use cookies for authentication, trim the video and embed subtitles.
 This will download the file in the best available mp4+m4a format.
+
+### Embedded subtitles
+
+As last option you can embed subtitles in the video: enter the languages (e.g. `it,en`) or press ENTER for the auto-generated ones in the original language.
+The final file will contain one subtitle track per language (mp4 and mkv; webm videos are saved as mkv, since webm only supports WebVTT subtitles).
+
+When the video is trimmed, the subtitles are cut and aligned to the selected section.
+Without re-encoding the cut starts at the previous keyframe: mp4 hides this extra part, mkv keeps it (the video may start a few seconds earlier), and the subtitles are aligned to it.
 
 
 ## Audio-only download (MP3):

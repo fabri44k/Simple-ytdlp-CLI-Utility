@@ -4,14 +4,8 @@
 #include <string>
 
 
-void downloadFullVideoWithCookies(const std::string& url);
-void downloadFullVideoWithCookiesBest(const std::string& url);
-void downloadFullVideoWithoutCookies(const std::string& url);
-void downloadFullVideoWithoutCookiesBest(const std::string& url);
-void downloadTrimmedVideoWithCookies(const std::string& url, const std::string& selectionString);
-void downloadTrimmedVideoWithCookiesBest(const std::string& url, const std::string& selectionString);
-void downloadTrimmedVideoWithoutCookies(const std::string& url, const std::string& selectionString);
-void downloadTrimmedVideoWithoutCookiesBest(const std::string& url, const std::string& selectionString);
+void downloadVideo(const std::string& url, bool bestFormat, bool useCookies,
+                   const std::string& startTime, const std::string& endTime, const std::string& subLangs);
 void downloadAudioMp3WithThumbnail(const std::string& url);
 void downloadPlaylistAudioMp3WithThumbnailAndEnumeration(const std::string& url);
 void downloadPlaylistAudioMp3WithThumbnail(const std::string& url);
