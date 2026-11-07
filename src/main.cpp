@@ -1,4 +1,5 @@
 #include <iostream>
+#include <limits>
 #include "../include/yt_dlp_utils.h"
 
 using namespace std;
@@ -193,10 +194,30 @@ int handleSubtitlesMode() {
     cout << "Enter the URL: ";
     cin >> URL;
 
+    // USE OF COOKIES
+    bool cookies_flag = false;
+    cout << "Do you want to use cookies? (y/n): ";
+    char choice;
+    cin >> choice;
+    if (choice == 'y') {
+        cookies_flag = true;
+    } else if (choice == 'n') {
+        cookies_flag = false;
+    } else {
+        cout << "Invalid choice" << endl;
+        return 1;
+    }
+    cin.ignore(numeric_limits<streamsize>::max(), '\n');
+
+    string languages;
+    cout << "Enter subtitle languages separated by comma (e.g. it,en)" << endl;
+    cout << "or press ENTER for all manual subtitles + auto-generated in the original language: ";
+    getline(cin, languages);
+
     cout << RED << "\nSTART YT-DLP DOWNLOAD..." << RESET << endl;
     cout << RED << "----------------------------------------------------" << RESET << endl;
 
-    downloadSubtitles(URL);
+    downloadSubtitles(URL, languages, cookies_flag);
 
     return 0;
 }
@@ -219,7 +240,7 @@ void helpMenu(){
     cout << "  --best           Download the best Mp4+m4a available format" << endl;
     cout << "  -a           Download only the mp3 format" << endl;
     cout << "  -p           Enter playlist mode" << endl;
-    cout << "  --sub       Download all subtitles available (not auto generated)" << endl;
+    cout << "  --sub       Download subtitles in SRT (manual + auto-generated)" << endl;
 }
 
 

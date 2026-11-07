@@ -8,18 +8,18 @@ Learn more about `yt-dlp` at [yt-dlp GitHub](https://github.com/yt-dlp/yt-dlp).
 
 ## Features
 
-- ✅ **Video Download**  
+- **Video Download**  
   Download a video from a site supported by `yt-dlp`, in best available format (only YT) or in a specified format.
-- ✅ **Cookie Integration**  
+- **Cookie Integration**  
   Use cookies from your Firefox browser for accessing private or age-restricted video.
-- ✅ **Trim Specific Sections**  
+- **Trim Specific Sections**  
   Download only a portion of a video using time ranges (e.g., `00:30:00-00:45:00`).
-- ✅ **Audio-Only (MP3)**  
+- **Audio-Only (MP3)**  
   Extract audio as MP3 with embedded thumbnail.
-- ✅ **Playlist Support**  
+- **Playlist Support**  
   Download entire playlists with optional numbering (e.g., `1-title.mp3`, `2-title.mp3`).
-- ✅ **Subtitles Download**  
-  Fetch all available subtitles (non-auto-generated) in SRT format.
+- **Subtitles Download**  
+  Fetch subtitles in SRT format, including auto-generated captions.
 
 ## Example of usage
 
@@ -111,5 +111,6 @@ Disclaimer: I'have not tested the playlist download on all sites, it will work w
 .\ytdlp_utility -s
 ```
 
-This will download all available subtitles in SRT format, excluding auto-generated ones.
+You will be asked whether to use cookies (from Firefox) and for the subtitle languages (e.g. `it,en`). Cookies are recommended for auto-translated subtitles, which YouTube often blocks with `HTTP 429` otherwise. If one language fails, the others are still downloaded. Manual subtitles are preferred, auto-generated ones are used as fallback.
+Pressing ENTER downloads all manual subtitles plus the auto-generated captions in the video's original language. All files are saved in SRT format.
 

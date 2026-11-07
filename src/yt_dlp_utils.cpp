@@ -2,6 +2,7 @@
 #include <iostream>
 #include <filesystem>
 #include <cstdlib>
+#include <vector>
 
 namespace fs = std::filesystem;
 using namespace std;
@@ -143,8 +144,26 @@ void downloadPlaylistBestVideoAudioWithEnumeration(const std::string& url) {
     system(command.c_str());
 }
 
-void downloadSubtitles(const std::string& url) {
-    std::string command = "yt-dlp --all-subs --skip-download --convert-subs=srt -o \"%(title)s.%(ext)s\" " + url;
-    std::cout << "Executing: " << command << std::endl;
-    system(command.c_str());
+// SUBTITLES (manual + auto-generated)
+// languages empty -> all manual subtitles + auto-generated captions in the original language
+// languages set   -> only those languages (manual preferred, auto-generated as fallback)
+// --ignore-errors: a language that fails (e.g. HTTP 429) doesn't stop the others
+// --sub-format srt/best: native SRT from the site; converting YouTube's roll-up VTT
+// auto-captions duplicates every line, so --convert-subs is only a fallback
+void downloadSubtitles(const std::string& url, const std::string& languages, bool useCookies) {
+    const std::string base = useCookies ? "yt-dlp --cookies-from-browser firefox" : "yt-dlp";
+    const std::string common = " --ignore-errors --skip-download --sub-format \"srt/best\" --convert-subs srt -o \"%(title)s.%(ext)s\" \"" + url + "\"";
+    std::vector<std::string> commands;
+    if (languages.empty()) {
+        // "all" with --write-auto-subs would also fetch ~150 auto-translations (HTTP 429),
+        // so manual subs and original auto captions are fetched separately
+        commands.push_back(base + " --write-subs --sub-langs \"all,-live_chat\"" + common);
+        commands.push_back(base + " --write-auto-subs --sub-langs \".*-orig\"" + common);
+    } else {
+        commands.push_back(base + " --write-subs --write-auto-subs --sub-langs \"" + languages + "\"" + common);
+    }
+    for (const auto& command : commands) {
+        std::cout << "Executing: " << command << std::endl;
+        system(command.c_str());
+    }
 }

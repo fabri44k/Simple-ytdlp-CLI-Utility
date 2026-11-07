@@ -132,9 +132,21 @@ def download_playlist_best_video_audio_with_enumeration(url):
     execute_command(command)
 
 # DOWNLOAD SUBTITLES
-def download_subtitles(url):
-    command = f'yt-dlp --all-subs --skip-download --convert-subs=srt -o "%(title)s.%(ext)s" "{url}"'
-    execute_command(command)
+def download_subtitles(url, languages="", use_cookies=False):
+    """languages vuoto -> tutti i sottotitoli manuali + auto-generati nella lingua originale
+    languages impostato -> solo quelle lingue (manuali preferiti, auto-generati come fallback)
+    --ignore-errors: una lingua che fallisce (es. HTTP 429) non blocca le altre
+    --sub-format srt/best: SRT nativo dal sito; convertire i VTT "roll-up" dei sottotitoli
+    automatici di YouTube duplica ogni riga, quindi --convert-subs resta solo come fallback"""
+    base = 'yt-dlp --cookies-from-browser firefox' if use_cookies else 'yt-dlp'
+    common = f'--ignore-errors --skip-download --sub-format "srt/best" --convert-subs srt -o "%(title)s.%(ext)s" "{url}"'
+    if not languages:
+        # "all" con --write-auto-subs scaricherebbe anche ~150 traduzioni automatiche (HTTP 429),
+        # quindi manuali e auto-generati originali vengono scaricati separatamente
+        execute_command(f'{base} --write-subs --sub-langs "all,-live_chat" {common}')
+        execute_command(f'{base} --write-auto-subs --sub-langs ".*-orig" {common}')
+    else:
+        execute_command(f'{base} --write-subs --write-auto-subs --sub-langs "{languages}" {common}')
 
 ##* ytdlp CALlS
 
@@ -282,9 +294,22 @@ def handle_subtitles_mode():
     """Modalità sottotitoli"""
     print("Subtitles mode selected")
     url = get_user_input("Enter the URL: ")
+
+    # USE OF COOKIES
+    choice = get_user_input("Do you want to use cookies? (y/n): ").lower()
+    if choice == 'y':
+        cookies_flag = True
+    elif choice == 'n':
+        cookies_flag = False
+    else:
+        print("Invalid choice")
+        return 1
+
+    print("Enter subtitle languages separated by comma (e.g. it,en)")
+    languages = get_user_input("or press ENTER for all manual subtitles + auto-generated in the original language: ").strip()
     print(f"{RED}\nSTART YT-DLP DOWNLOAD...{RESET}")
     print(f"{RED}----------------------------------------------------{RESET}")
-    download_subtitles(url)
+    download_subtitles(url, languages, cookies_flag)
     return 0
 
 def help_menu():
@@ -296,7 +321,7 @@ def help_menu():
     print("  --best           Download the best Mp4+m4a available format")
     print("  -a           Download only the mp3 format")
     print("  -p           Enter playlist mode")
-    print("  --sub       Download all subtitles available (not auto generated)")
+    print("  --sub       Download subtitles in SRT (manual + auto-generated)")
 
 def main():
     # Verifica installazioni
