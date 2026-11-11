@@ -35,39 +35,38 @@ Learn more about `yt-dlp` at [yt-dlp GitHub](https://github.com/yt-dlp/yt-dlp).
 
 ## Requirements
 
-- `yt-dlp` (Remember to always use the latest version)
-- `FFmpeg`
-- `make` for building the executable ([Windows version](https://gnuwin32.sourceforge.net/packages/make.htm)).
-- `Python` if you want to run the script directly without compiling.
-
-## Compiling
-
-In the main repo directory run the following command to build the executable:
-
-```bash
-make 
-```
-This will create an executable named `ytdlp_utility` in the build directory.
-
-Or you can run the script in the src folder directly with Python:
-
-```bash
-pip install yt-dlp
-python ytdlp_utility.py
-```
-The usage is the same as the compiled version.
+- `Python` 3.10 or newer, standard library only: no Python packages to install.
+- `yt-dlp` available in your `PATH`, installed in any way (standalone binary, pipx, package manager). Remember to always use the latest version.
+- `FFmpeg` (including `ffprobe`) available in your `PATH`.
 
 ## Usage
 
-Once you have the executable or the python script, you can run it with some option. The downloaded file or folder will be in the same directory of the executable.
+Run the script with Python, optionally followed by one option:
+
+```bash
+python3 ytdlp_utility.py [option]
+```
+
+On Linux and macOS you can also run it directly with `./ytdlp_utility.py`.
+The downloaded files and folders are saved in the current working directory.
 Remember to provide an url supported by `yt-dlp` (e.g., YouTube, Vimeo, etc.).
+
+| Option | Mode |
+|---|---|
+| (none) | Video+Audio with full selection of the output format |
+| `--best` | Video+Audio in the best mp4+m4a format |
+| `-a` | Audio only (MP3) |
+| `-p` | Playlist |
+| `--sub` | Subtitles only (SRT) |
+| `-h`, `--help` | Show the help message |
+| `-V`, `--version` | Show the version |
 
 ## Video and audio download
 
 - Video and audio download with custom format selection:
 
 ```bash
-.\ytdlp_utility
+python3 ytdlp_utility.py
 ```
 Later you can decide to use cookies for authentication, trim the video and embed subtitles. Only firefox cookies are supported at the moment.
 This will download the file in the specific format you choose.
@@ -76,7 +75,7 @@ This will download the file in the specific format you choose.
 - Video and audio download with best mp4+m4a only supported by YT, may not work on all sites:
 
 ```bash
-.\ytdlp_utility --best
+python3 ytdlp_utility.py --best
 ```
 Later you can decide to use cookies for authentication, trim the video and embed subtitles.
 This will download the file in the best available mp4+m4a format.
@@ -92,10 +91,10 @@ When the video is trimmed, the subtitles are cut and aligned to the selected sec
 Without re-encoding the cut starts at the previous keyframe: mp4 hides this extra part, mkv keeps it (the video may start a few seconds earlier), and the subtitles are aligned to it.
 
 
-## Audio-only download (MP3):
+## Audio-only download (MP3)
 
 ```bash
-.\ytdlp_utility -a
+python3 ytdlp_utility.py -a
 ```
 
 This will download the audio in MP3 format with an embedded thumbnail.
@@ -103,10 +102,10 @@ This will download the audio in MP3 format with an embedded thumbnail.
 ## Playlist download
 
 ```bash
-.\ytdlp_utility -p
+python3 ytdlp_utility.py -p
 ```
 
-Than choose between these 4 option:
+Then choose between these 4 options:
 
 1) Audio mode (mp3) with enumeration (1-NameVideo1.mp3 2-NameVideo2.mp3...)
 2) Audio mode (mp3) without enumeration
@@ -114,15 +113,15 @@ Than choose between these 4 option:
 4) Video+Audio mode (best mp4+m4a) without enumeration
 
 Where enumeration means that the files will be named with a number prefix (e.g., `1-Title.mp3`) representing their order in the playlist, and best mp4+m4a means that it will work on YouTube and may not work on other sites.
+The files are saved in a folder named after the playlist.
 
-Disclaimer: I'have not tested the playlist download on all sites, it will work with YT but it may not work with other sites.
+Disclaimer: I have not tested the playlist download on all sites, it will work with YT but it may not work with other sites.
 
 ## Subtitles download
 
 ```bash
-.\ytdlp_utility -s
+python3 ytdlp_utility.py --sub
 ```
 
 You will be asked whether to use cookies (from Firefox) and for the subtitle languages (e.g. `it,en`). Cookies are recommended for auto-translated subtitles, which YouTube often blocks with `HTTP 429` otherwise. If one language fails, the others are still downloaded. Manual subtitles are preferred, auto-generated ones are used as fallback.
 Pressing ENTER downloads all manual subtitles plus the auto-generated captions in the video's original language. All files are saved in SRT format.
-
